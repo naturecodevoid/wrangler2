@@ -9,4 +9,3 @@ git config --global init.defaultBranch wrangler-build
 git init
 git add --all
 git commit -m "build"
-git remote add origin https://github.com/naturecodevoid/wrangler2.git
