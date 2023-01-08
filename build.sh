@@ -1,8 +1,8 @@
 #!/bin/sh
 
+npm i
 cd packages/wrangler
 cp ../../.gitignore .
-npm i
 npm run build
 git config --global user.email ""
 git config --global user.name "github-actions"
