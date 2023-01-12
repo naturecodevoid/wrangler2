@@ -4,9 +4,7 @@ import * as TOML from "@iarna/toml";
 import { execa, execaSync } from "execa";
 import { rest } from "msw";
 import { parseConfigFileTextToJson } from "typescript";
-import { FormData } from "undici";
 import { version as wranglerVersion } from "../../package.json";
-import { fetchDashboardScript } from "../cfetch/internal";
 import { getPackageManager } from "../package-manager";
 import { mockAccountId, mockApiToken } from "./helpers/mock-account-id";
 import { mockConsoleMethods } from "./helpers/mock-console";
@@ -46,8 +44,6 @@ describe("init", () => {
 
 	afterEach(() => {
 		clearDialogs();
-		msw.resetHandlers();
-		msw.restoreHandlers();
 	});
 
 	const std = mockConsoleMethods();
@@ -76,6 +72,7 @@ describe("init", () => {
 			✨ Installed @cloudflare/workers-types, typescript, and vitest into devDependencies
 
 			To start developing your Worker, run \`npm start\`
+			To start testing your Worker, run \`npm test\`
 			To publish your Worker to the Internet, run \`npm run deploy\`"
 		`);
 			expect(std.err).toMatchInlineSnapshot(`""`);
@@ -108,6 +105,7 @@ describe("init", () => {
 			✨ Installed @cloudflare/workers-types, typescript, and vitest into devDependencies
 
 			To start developing your Worker, run \`cd my-worker && npm start\`
+			To start testing your Worker, run \`npm test\`
 			To publish your Worker to the Internet, run \`npm run deploy\`"
 		`);
 			expect(std.err).toMatchInlineSnapshot(`""`);
@@ -140,6 +138,7 @@ describe("init", () => {
 			✨ Installed @cloudflare/workers-types, typescript, and vitest into devDependencies
 
 			To start developing your Worker, run \`npm start\`
+			To start testing your Worker, run \`npm test\`
 			To publish your Worker to the Internet, run \`npm run deploy\`",
 			  "warn": "",
 			}
@@ -585,6 +584,7 @@ describe("init", () => {
 			✨ Installed @cloudflare/workers-types, typescript, and vitest into devDependencies
 
 			To start developing your Worker, run \`npm start\`
+			To start testing your Worker, run \`npm test\`
 			To publish your Worker to the Internet, run \`npm run deploy\`",
 			  "warn": "",
 			}
@@ -611,6 +611,7 @@ describe("init", () => {
 			✨ Installed @cloudflare/workers-types, typescript, and vitest into devDependencies
 
 			To start developing your Worker, run \`cd path/to/worker/my-worker && npm start\`
+			To start testing your Worker, run \`npm test\`
 			To publish your Worker to the Internet, run \`npm run deploy\`",
 			  "warn": "",
 			}
@@ -1178,8 +1179,12 @@ describe("init", () => {
 							name: expect.stringContaining("wrangler-tests"),
 							version: "0.0.0",
 							scripts: {
-								start: "wrangler dev",
 								deploy: "wrangler publish",
+								start: "wrangler dev",
+								test: "vitest",
+							},
+							devDependencies: {
+								wrangler: expect.any(String),
 							},
 						}),
 					},
@@ -1196,6 +1201,7 @@ describe("init", () => {
 			✨ Installed @cloudflare/workers-types, typescript, and vitest into devDependencies
 
 			To start developing your Worker, run \`npm start\`
+			To start testing your Worker, run \`npm test\`
 			To publish your Worker to the Internet, run \`npm run deploy\`"
 		`);
 		});
@@ -1535,6 +1541,7 @@ describe("init", () => {
 			✨ Installed @cloudflare/workers-types, typescript, and vitest into devDependencies
 
 			To start developing your Worker, run \`cd path/to/worker/my-worker && npm start\`
+			To start testing your Worker, run \`npm test\`
 			To publish your Worker to the Internet, run \`npm run deploy\`",
 			  "warn": "",
 			}
@@ -2015,6 +2022,20 @@ describe("init", () => {
 						...MINIMAL_WRANGLER_TOML,
 						name: workerName,
 					}),
+					"package.json": {
+						contents: expect.objectContaining({
+							name: expect.stringContaining("wrangler-tests"),
+							version: "0.0.0",
+							scripts: {
+								deploy: "wrangler publish",
+								start: "wrangler dev",
+								test: "vitest",
+							},
+							devDependencies: {
+								wrangler: expect.any(String),
+							},
+						}),
+					},
 				},
 			});
 			expect(std).toMatchInlineSnapshot(`
@@ -2030,6 +2051,7 @@ describe("init", () => {
 			✨ Installed @cloudflare/workers-types, typescript, and vitest into devDependencies
 
 			To start developing your Worker, run \`npm start\`
+			To start testing your Worker, run \`npm test\`
 			To publish your Worker to the Internet, run \`npm run deploy\`",
 			  "warn": "",
 			}
@@ -2060,6 +2082,7 @@ describe("init", () => {
 			✨ Installed @cloudflare/workers-types, typescript, and vitest into devDependencies
 
 			To start developing your Worker, run \`cd path/to/worker && npm start\`
+			To start testing your Worker, run \`npm test\`
 			To publish your Worker to the Internet, run \`npm run deploy\`",
 			  "warn": "",
 			}
@@ -2090,6 +2113,7 @@ describe("init", () => {
 			✨ Installed @cloudflare/workers-types, typescript, and vitest into devDependencies
 
 			To start developing your Worker, run \`cd WEIRD_w0rkr_N4m3.js.tsx.tar.gz && npm start\`
+			To start testing your Worker, run \`npm test\`
 			To publish your Worker to the Internet, run \`npm run deploy\`",
 			  "warn": "",
 			}
@@ -3042,19 +3066,11 @@ export function setMockFetchDashScript(mockResponse: string) {
 	msw.use(
 		rest.get(
 			`*/accounts/:accountId/workers/services/:fromDashScriptName/environments/:environment/content`,
-			(req, res, ctx) => {
-				// This is a fake FormData object, until we can get MSW (beta) that supports FormData
-				const mockForm = new FormData();
-				mockForm.append("name", mockResponse);
-				// Sending it as JSON will result in empty object, but cause the fetchDashboardScript to execute its code
-				return res(ctx.status(200), ctx.json(mockForm));
+			(_, res, ctx) => {
+				return res(ctx.text(mockResponse));
 			}
 		)
 	);
-	// Mock the actual return value that FormData would return
-	(fetchDashboardScript as jest.Mock).mockImplementationOnce(() => {
-		return mockResponse;
-	});
 }
 
 /**
