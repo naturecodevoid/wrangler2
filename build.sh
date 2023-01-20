@@ -2,8 +2,7 @@
 
 npm i
 cd packages/wrangler
-jq --raw-output '.version += "-esbuild-plugins"' package.json
-cat package.json
+jq '.version += "-esbuild-plugins"' package.json > test
 npm run build
 git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 git config --global user.name "github-actions[bot]"
