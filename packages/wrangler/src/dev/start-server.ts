@@ -1,6 +1,5 @@
 import { fork } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import * as util from "node:util";
 import onExit from "signal-exit";
@@ -27,6 +26,7 @@ import { startRemoteServer } from "./remote";
 import { validateDevProps } from "./validate-dev-props";
 
 import type { Config } from "../config";
+import type { DurableObjectBindings } from "../config/environment";
 import type { WorkerRegistry } from "../dev-registry";
 import type { Entry } from "../entry";
 import type { DevProps, DirectorySyncResult } from "./dev";
@@ -111,6 +111,7 @@ export async function startDevServer(
 			local: props.local,
 			experimentalLocal: props.experimentalLocal,
 			plugins: props.plugins,
+			doBindings: props.bindings.durable_objects?.bindings ?? [],
 		});
 
 		if (props.local) {
@@ -221,6 +222,7 @@ async function runEsbuild({
 	local,
 	experimentalLocal,
 	plugins,
+	doBindings,
 }: {
 	entry: Entry;
 	destination: string | undefined;
@@ -242,6 +244,7 @@ async function runEsbuild({
 	local: boolean;
 	experimentalLocal: boolean | undefined;
 	plugins: Plugin[] | undefined;
+	doBindings: DurableObjectBindings;
 }): Promise<EsbuildBundle | undefined> {
 	if (!destination) return;
 
@@ -284,6 +287,7 @@ async function runEsbuild({
 				local,
 				experimentalLocal,
 				plugins,
+				doBindings,
 		  });
 
 	return {
@@ -347,15 +351,6 @@ export async function startLocalServer({
 		if (bindings.services && bindings.services.length > 0) {
 			logger.warn(
 				"⎔ Support for service bindings in local mode is experimental and may change."
-			);
-		}
-
-		// In local mode, we want to copy all referenced modules into
-		// the output bundle directory before starting up
-		for (const module of bundle.modules) {
-			await writeFile(
-				path.join(path.dirname(bundle.path), module.name),
-				module.content
 			);
 		}
 

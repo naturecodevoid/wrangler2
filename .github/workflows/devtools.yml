@@ -1,13 +1,16 @@
-name: Queues Experimental builds
+name: Publish Devtools
+
 on:
   push:
     branches:
-      - queues
+      - main
+      - "devtools/**"
+      - "**-devtools"
 
 jobs:
-  build:
+  publish:
     if: ${{ github.repository_owner == 'cloudflare' }}
-    name: Build and release `wrangler@queues` to NPM
+    name: Build & Publish a branch preview of devtools to Cloudflare
     runs-on: ubuntu-latest
 
     steps:
@@ -16,10 +19,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Use Node.js 16.13
+      - name: Use Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 16.13
           cache: "npm" # cache ~/.npm in case 'npm ci' needs to run
 
       - name: Install workerd Dependencies
@@ -35,17 +37,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Check for errors
-        run: npm run check
+      - name: Run Devtools release & publish
+        run: cd packages/wrangler-devtools && make publish
         env:
-          NODE_OPTIONS: "--max_old_space_size=8192"
-
-      - name: Modify package.json version
-        run: node .github/version-script.js
-
-      - name: Publish `wrangler@queues` to NPM
-        run: npm publish --tag queues
-        env:
-          NODE_ENV: "production"
-          NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
-        working-directory: packages/wrangler
+          CLOUDFLARE_ACCOUNT_ID: "e35fd947284363a46fd7061634477114"
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

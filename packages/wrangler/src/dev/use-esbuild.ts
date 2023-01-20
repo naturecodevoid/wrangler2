@@ -125,6 +125,7 @@ export function useEsbuild({
 						minify,
 						nodeCompat,
 						betaD1Shims,
+						doBindings: durableObjects.bindings,
 						define,
 						checkFetch: true,
 						assets: assets && {
