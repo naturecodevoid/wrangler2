@@ -747,7 +747,7 @@ async function validateDevServerSettings(
 		logger.warn(
 			"Setting upstream-protocol to http is not currently implemented.\n" +
 				"If this is required in your project, please add your use case to the following issue:\n" +
-				"https://github.com/cloudflare/wrangler2/issues/583."
+				"https://github.com/cloudflare/workers-sdk/issues/583."
 		);
 	}
 	const nodeCompat = args.nodeCompat ?? config.node_compat;
@@ -887,6 +887,7 @@ function getBindings(
 			...(args.r2 || []),
 		],
 		dispatch_namespaces: configParam.dispatch_namespaces,
+		mtls_certificates: configParam.mtls_certificates,
 		services: configParam.services,
 		analytics_engine_datasets: configParam.analytics_engine_datasets,
 		unsafe: configParam.unsafe?.bindings,
