@@ -359,6 +359,26 @@ function normalizeAndValidateMainField(
 }
 
 /**
+ * Validate the `base_dir` field and return the normalized values.
+ */
+function normalizeAndValidateBaseDirField(
+	configPath: string | undefined,
+	rawDir: string | undefined
+): string | undefined {
+	const configDir = path.dirname(configPath ?? "wrangler.toml");
+	if (rawDir !== undefined) {
+		if (typeof rawDir === "string") {
+			const directory = path.resolve(configDir);
+			return path.resolve(directory, rawDir);
+		} else {
+			return rawDir;
+		}
+	} else {
+		return;
+	}
+}
+
+/**
  * Validate the `dev` configuration and return the normalized values.
  */
 function normalizeAndValidateDev(
@@ -1012,6 +1032,17 @@ function normalizeAndValidateEnvironment(
 			),
 			deprecatedUpload
 		),
+		base_dir: normalizeAndValidateBaseDirField(
+			configPath,
+			inheritable(
+				diagnostics,
+				topLevelEnv,
+				rawEnv,
+				"base_dir",
+				isString,
+				undefined
+			)
+		),
 		route,
 		routes,
 		triggers: inheritable(
@@ -1073,6 +1104,16 @@ function normalizeAndValidateEnvironment(
 			envName,
 			"kv_namespaces",
 			validateBindingArray(envName, validateKVBinding),
+			[]
+		),
+		send_email: notInheritable(
+			diagnostics,
+			topLevelEnv,
+			rawConfig,
+			rawEnv,
+			envName,
+			"send_email",
+			validateBindingArray(envName, validateSendEmailBinding),
 			[]
 		),
 		queues: notInheritable(
@@ -1163,10 +1204,8 @@ function normalizeAndValidateEnvironment(
 			rawEnv,
 			envName,
 			"unsafe",
-			validateBindingsProperty(envName, validateUnsafeBinding),
-			{
-				bindings: [],
-			}
+			validateUnsafeSettings(envName),
+			{}
 		),
 		zone_id: rawEnv.zone_id,
 		no_bundle: inheritable(
@@ -1504,6 +1543,62 @@ const validateBindingsProperty =
 		return isValid;
 	};
 
+const validateUnsafeSettings =
+	(envName: string): ValidatorFn =>
+	(diagnostics, field, value, config) => {
+		const fieldPath =
+			config === undefined ? `${field}` : `env.${envName}.${field}`;
+
+		if (typeof value !== "object" || value === null || Array.isArray(value)) {
+			diagnostics.errors.push(
+				`The field "${fieldPath}" should be an object but got ${JSON.stringify(
+					value
+				)}.`
+			);
+			return false;
+		}
+
+		// At least one of bindings and metadata must exist
+		if (!hasProperty(value, "bindings") && !hasProperty(value, "metadata")) {
+			diagnostics.errors.push(
+				`The field "${fieldPath}" should contain at least one of "bindings" or "metadata" properties but got ${JSON.stringify(
+					value
+				)}.`
+			);
+			return false;
+		}
+
+		// unsafe.bindings
+		if (hasProperty(value, "bindings") && value.bindings !== undefined) {
+			const validateBindingsFn = validateBindingsProperty(
+				envName,
+				validateUnsafeBinding
+			);
+			const valid = validateBindingsFn(diagnostics, field, value, config);
+			if (!valid) {
+				return false;
+			}
+		}
+
+		// unsafe.metadata
+		if (
+			hasProperty(value, "metadata") &&
+			value.metadata !== undefined &&
+			(typeof value.metadata !== "object" ||
+				value.metadata === null ||
+				Array.isArray(value.metadata))
+		) {
+			diagnostics.errors.push(
+				`The field "${fieldPath}.metadata" should be an object but got ${JSON.stringify(
+					value.metadata
+				)}.`
+			);
+			return false;
+		}
+
+		return true;
+	};
+
 /**
  * Check that the given field is a valid "durable_object" binding object.
  */
@@ -1714,6 +1809,53 @@ const validateKVBinding: ValidatorFn = (diagnostics, field, value) => {
 			`"${field}" bindings should, optionally, have a string "preview_id" field but got ${JSON.stringify(
 				value
 			)}.`
+		);
+		isValid = false;
+	}
+	return isValid;
+};
+
+const validateSendEmailBinding: ValidatorFn = (diagnostics, field, value) => {
+	if (typeof value !== "object" || value === null) {
+		diagnostics.errors.push(
+			`"send_email" bindings should be objects, but got ${JSON.stringify(
+				value
+			)}`
+		);
+		return false;
+	}
+	let isValid = true;
+	// send email bindings must have a name.
+	if (!isRequiredProperty(value, "name", "string")) {
+		diagnostics.errors.push(
+			`"${field}" bindings should have a string "name" field but got ${JSON.stringify(
+				value
+			)}.`
+		);
+		isValid = false;
+	}
+	if (!isOptionalProperty(value, "destination_address", "string")) {
+		diagnostics.errors.push(
+			`"${field}" bindings should, optionally, have a string "destination_address" field but got ${JSON.stringify(
+				value
+			)}.`
+		);
+		isValid = false;
+	}
+	if (!isOptionalProperty(value, "allowed_destination_addresses", "object")) {
+		diagnostics.errors.push(
+			`"${field}" bindings should, optionally, have a []string "allowed_destination_addresses" field but got ${JSON.stringify(
+				value
+			)}.`
+		);
+		isValid = false;
+	}
+	if (
+		"destination_address" in value &&
+		"allowed_destination_addresses" in value
+	) {
+		diagnostics.errors.push(
+			`"${field}" bindings should have either a "destination_address" or "allowed_destination_addresses" field, but not both.`
 		);
 		isValid = false;
 	}
@@ -2170,6 +2312,7 @@ const validateConsumer: ValidatorFn = (diagnostics, field, value, _config) => {
 			"max_batch_timeout",
 			"max_retries",
 			"dead_letter_queue",
+			"max_concurrency",
 		])
 	) {
 		isValid = false;
@@ -2185,12 +2328,13 @@ const validateConsumer: ValidatorFn = (diagnostics, field, value, _config) => {
 
 	const options: {
 		key: string;
-		type: "number" | "string";
+		type: "number" | "string" | "boolean";
 	}[] = [
 		{ key: "max_batch_size", type: "number" },
 		{ key: "max_batch_timeout", type: "number" },
 		{ key: "max_retries", type: "number" },
 		{ key: "dead_letter_queue", type: "string" },
+		{ key: "max_concurrency", type: "number" },
 	];
 	for (const optionalOpt of options) {
 		if (!isOptionalProperty(value, optionalOpt.key, optionalOpt.type)) {
