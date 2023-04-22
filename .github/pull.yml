@@ -1,0 +1,5 @@
+version: "1"
+rules:
+  - base: esbuild-actions-workflow
+    upstream: cloudflare:main
+    mergeMethod: merge
